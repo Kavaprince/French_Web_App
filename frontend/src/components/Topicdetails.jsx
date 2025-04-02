@@ -134,7 +134,7 @@ export function Topicdetails({ topic, onDelete, onSave }) {
                         <audio
                           controls
                           className="w-full mt-2 border border-gray-300 rounded-lg"
-                          src={`http://localhost:3000/${topic.audio.path}`}
+                          src={topic.audio.path}
                         >
                           Your browser does not support the audio element.
                         </audio>
