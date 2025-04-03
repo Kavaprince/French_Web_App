@@ -11,7 +11,7 @@ import { Dashboard } from "./pages/Dashboard";
 import { Profile } from "./pages/Profile";
 import { Contact } from "./pages/Contact";
 import { Layout } from "./components/Layout";
-import { VerifyEmail } from "@/components/VerifyEmail";
+//import { VerifyEmail } from "@/components/VerifyEmail";
 import axios from "axios";
 
 //import { Navbar } from "./components/Navbar";
@@ -23,12 +23,11 @@ const App = () => {
       axios.defaults.headers.common["Authorization"] = `Bearer ${token}`;
     }
   }, []);
-
+  // //<Route path="/verify-email" element={<VerifyEmail />} />
   return (
     <Router>
       <Routes>
         <Route path="/" element={<Landing />} />
-        <Route path="/verify-email" element={<VerifyEmail />} />
         <Route element={<Layout />}>
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/topics" element={<Topics />} />
