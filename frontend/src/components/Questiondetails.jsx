@@ -6,7 +6,7 @@ import {
 } from "@/components/ui/collapsible";
 import { Button } from "@/components/ui/button";
 import { UpdateQuestion } from "@/components/Updatequestion";
-import { AnswerQuestion } from "@/components/AnswerQuestion";
+import { AnswerQuestion } from "@/components/Answerquestion";
 import { Edit, Trash } from "lucide-react";
 import { deleteQuiz, getQuizzes, updateQuiz } from "@/api";
 import * as jwt_decode from "jwt-decode";
