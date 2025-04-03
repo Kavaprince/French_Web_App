@@ -20,9 +20,17 @@ dotenv.config({ path: "./config.env" });
 //const upload = multer({ dest: "uploads/audio/" }); // Save audio files to "uploads/audio/"
 const storage = multer.memoryStorage(); // Store files in memory for processing
 const upload = multer({ storage: storage }); // Use memory storage for audio files
+const googleCredentials = JSON.parse(
+  process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON
+);
+
 const storageGCP = new Storage({
-  keyFilename: process.env.GOOGLE_APPLICATION_CREDENTIALS, // Dynamically fetch path from config.env
+  credentials: googleCredentials, // Provide the credentials directly
 });
+/*const storageGCP = new Storage({
+  keyFilename: process.env.GOOGLE_APPLICATION_CREDENTIALS, // Dynamically fetch path from config.env
+});*/
+
 // Initialize Google Cloud Storage
 const bucketName = "my-first-mern-bucket"; // Replace with your bucket name
 
