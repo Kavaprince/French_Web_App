@@ -8,7 +8,7 @@ import { UpdateTopic } from "@/components/Updatetopic";
 import { Edit, Trash } from "lucide-react";
 import { deleteTopic } from "@/api";
 import * as jwt_decode from "jwt-decode";
-import { SlideView } from "@/components/SlideView";
+import { SlideView } from "@/components/Slideview";
 
 export function Topicdetails({ topic, onDelete, onSave }) {
   const [isEditing, setIsEditing] = useState(false);
