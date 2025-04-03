@@ -78,7 +78,7 @@ export function SlideView({ topic, onClose }) {
               <audio
                 controls
                 className="w-full mt-4 rounded-md border border-gray-300"
-                src={`http://localhost:3000/${topic.audio.path}`}
+                src={topic.audio.path}
               >
                 Your browser does not support the audio element.
               </audio>
