@@ -20,16 +20,16 @@ dotenv.config({ path: "./config.env" });
 //const upload = multer({ dest: "uploads/audio/" }); // Save audio files to "uploads/audio/"
 const storage = multer.memoryStorage(); // Store files in memory for processing
 const upload = multer({ storage: storage }); // Use memory storage for audio files
-const googleCredentials = JSON.parse(
+/*const googleCredentials = JSON.parse(
   process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON
 );
 
 const storageGCP = new Storage({
   credentials: googleCredentials, // Provide the credentials directly
-});
-/*const storageGCP = new Storage({
-  keyFilename: process.env.GOOGLE_APPLICATION_CREDENTIALS, // Dynamically fetch path from config.env
 });*/
+const storageGCP = new Storage({
+  keyFilename: process.env.GOOGLE_APPLICATION_CREDENTIALS, // Dynamically fetch path from config.env
+});
 
 // Initialize Google Cloud Storage
 const bucketName = "my-first-mern-bucket"; // Replace with your bucket name
@@ -103,43 +103,73 @@ topicRoutes.post(
           .json({ message: "Access denied. Only admins can create topics." });
       }
 
-      // Upload audio file to Google Cloud Storage
+      // Ensure an audio file is included
       const file = req.file;
       if (!file) {
         return res.status(400).send({ message: "Audio file is required." });
       }
 
-      const blob = storageGCP.bucket(bucketName).file(file.originalname);
-      await blob.save(file.buffer, {
+      // Define the folder path and file path
+      const folderPath = "french-web-app/audio"; // Logical folder path
+      const filePath = `${folderPath}/${file.originalname}`; // Full object name
+
+      // Upload the audio file to Google Cloud Storage
+      const bucket = storageGCP.bucket(bucketName); // Access the bucket
+      const blob = bucket.file(filePath); // Create file in bucket
+
+      // Create a write stream for the file
+      const blobStream = blob.createWriteStream({
         metadata: {
-          contentType: file.mimetype,
+          contentType: file.mimetype, // Set content type dynamically
         },
       });
 
-      console.log("Audio uploaded to Google Cloud Storage:", file.originalname);
+      blobStream.on("error", (err) => {
+        console.error("Upload error:", err);
+        return res.status(500).send({ message: "Error uploading file." });
+      });
 
-      // Create document for the topic
-      const newDocument = {
-        title: req.body.title,
-        learning_objectives: req.body.learning_objectives,
-        description: req.body.description,
-        examples: req.body.examples,
-        tips: req.body.tips,
-        audio: {
-          filename: file.originalname,
-          path: `https://storage.googleapis.com/${bucketName}/${file.originalname}`, // Public URL of the uploaded file
-        },
-        createdAt: new Date(),
-        createdBy: {
-          id: req.user._id,
-          username: req.user.username,
-        },
-      };
+      blobStream.on("finish", async () => {
+        console.log("File uploaded successfully to Google Cloud Storage");
 
-      const topicCollection = await db.collection("topics");
-      const result = await topicCollection.insertOne(newDocument);
-      console.log("Topic created by admin:", req.user.username);
-      res.status(200).send(result);
+        // Generate the public URL
+        const publicUrl = `https://storage.googleapis.com/${bucketName}/${filePath}`;
+
+        // Create the topic document
+        const newDocument = {
+          title: req.body.title,
+          learning_objectives: req.body.learning_objectives,
+          description: req.body.description,
+          examples: req.body.examples,
+          tips: req.body.tips,
+          audio: {
+            filename: file.originalname,
+            path: publicUrl, // Store the public URL in the database
+          },
+          createdAt: new Date(),
+          createdBy: {
+            id: req.user._id,
+            username: req.user.username,
+          },
+        };
+
+        // Insert the topic into the database
+        const topicCollection = await db.collection("topics");
+        const result = await topicCollection.insertOne(newDocument);
+
+        console.log("Topic created by admin:", req.user.username);
+        console.log("User role:", req.user.role);
+        console.log("Uploaded file:", file.originalname);
+        console.log("Generated public URL:", publicUrl);
+
+        res.status(200).send({
+          message: "Topic created successfully.",
+          data: result,
+        });
+      });
+
+      // End the stream
+      blobStream.end(file.buffer);
     } catch (err) {
       console.error("Error adding record or uploading audio:", err);
       res
@@ -157,17 +187,19 @@ topicRoutes.patch(
   upload.single("audio"),
   async (req, res) => {
     try {
-      console.log("Request params ID:", req.params.id); // Ensure ID is received
+      // Debugging logs
+      console.log("Request params ID:", req.params.id); // Ensure the ID is received
       console.log("Request body:", req.body); // Ensure body fields are received
-      console.log("Request file:", req.file); // Ensure audio file is received
+      console.log("Request file:", req.file); // Ensure audio file is received if provided
 
-      // Ensure the user updating the topic is an admin
+      // Ensure the user is an admin
       if (req.user.role !== "Admin") {
         return res
           .status(403)
           .json({ message: "Access denied. Only admins can update topics." });
       }
 
+      // Validate topic ID
       if (!req.params.id) {
         return res
           .status(400)
@@ -179,58 +211,60 @@ topicRoutes.patch(
       // Prepare updates
       const updates = {
         $set: {
-          title: req.body.title, // The title of the language-learning topic
-          learning_objectives: req.body.learning_objectives, // Key objectives for learners
-          description: req.body.description, // A detailed explanation of the topic
-          examples: req.body.examples, // Sample sentences or usage examples
-          tips: req.body.tips, // Additional tips or cultural notes
+          title: req.body.title,
+          learning_objectives: req.body.learning_objectives,
+          description: req.body.description,
+          examples: req.body.examples,
+          tips: req.body.tips,
           updatedAt: new Date(),
           updatedBy: {
-            id: req.user._id, // Admin's ID from the token
-            username: req.user.username, // Admin's username from the token
+            id: req.user._id,
+            username: req.user.username,
           },
         },
       };
 
-      // If there's a new audio file, upload it to Google Cloud Storage
+      // If an audio file is provided, update the audio field
       if (req.file) {
         const file = req.file;
-        const blob = storageGCP.bucket(bucketName).file(file.originalname);
+
+        // Define folder path and file path
+        const folderPath = "french-web-app/audio";
+        const filePath = `${folderPath}/${file.originalname}`;
+
+        // Upload the audio file to Google Cloud Storage
+        const bucket = storageGCP.bucket(bucketName);
+        const blob = bucket.file(filePath);
         await blob.save(file.buffer, {
           metadata: {
             contentType: file.mimetype,
           },
         });
 
-        console.log(
-          "Audio uploaded to Google Cloud Storage:",
-          file.originalname
-        );
+        console.log("Audio uploaded to Google Cloud Storage:", filePath);
 
-        // Update audio field with public URL
+        // Include the audio field update
         updates.$set.audio = {
           filename: file.originalname,
-          path: `https://storage.googleapis.com/${bucketName}/${file.originalname}`, // Public URL of the uploaded file
+          path: `https://storage.googleapis.com/${bucketName}/${filePath}`,
         };
       }
 
-      // Perform update in the database
+      // Perform the database update
       const topicCollection = await db.collection("topics");
       const result = await topicCollection.updateOne(query, updates);
 
-      if (result.modifiedCount === 0) {
+      if (result.matchedCount === 0) {
         return res
           .status(404)
           .json({ message: "Topic not found or no changes made." });
       }
 
-      console.log("Topic updated by admin:", req.user.username);
-      console.log("Topic updated on:", new Date());
-
+      console.log("Topic updated successfully by admin:", req.user.username);
       res.status(200).json({ message: "Topic updated successfully", result });
     } catch (err) {
-      console.error("Error updating record:", err);
-      res.status(500).json({ message: "Error updating record." });
+      console.error("Error updating topic:", err);
+      res.status(500).json({ message: "Error updating topic." });
     }
   }
 );
@@ -248,15 +282,16 @@ topicRoutes.delete(
       // Fetch the topic to check for an associated audio file
       const topic = await collection.findOne(query);
       if (!topic) {
+        console.error("Topic not found for ID:", req.params.id);
         return res.status(404).send({ message: "Topic not found." });
       }
 
       // Delete the audio file from Google Cloud Storage if it exists
       if (topic.audio && topic.audio.path) {
-        const fileName = topic.audio.filename;
-        const file = storageGCP.bucket(bucketName).file(fileName);
+        const filePath = `french-web-app/audio/${topic.audio.filename}`;
+        const file = storageGCP.bucket(bucketName).file(filePath);
         await file.delete();
-        console.log("Audio file deleted from Google Cloud Storage:", fileName);
+        console.log("Audio file deleted from Google Cloud Storage:", filePath);
       }
 
       // Delete the topic from the database
@@ -267,9 +302,15 @@ topicRoutes.delete(
           .send({ message: "Topic not found or already deleted." });
       }
 
+      console.log("Topic with ID:", req.params.id, "deleted successfully.");
       res.status(200).send({ message: "Topic deleted successfully." });
     } catch (err) {
-      console.error("Error deleting topic:", err);
+      console.error(
+        "Error deleting topic with ID:",
+        req.params.id,
+        "Error:",
+        err
+      );
       res.status(500).send({ message: "Error deleting topic." });
     }
   }
