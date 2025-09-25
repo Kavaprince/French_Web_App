@@ -23,7 +23,7 @@ export function Topicdetails({ topic, onDelete, onSave }) {
   const handleSave = (updatedTopic) => {
     console.log("Original Topic:", topic);
     console.log("Updated Topic:", updatedTopic);
-    onSave({ ...topic, ...updatedTopic });
+    onSave({ ...topic, ...updatedTopic }); // Ensure merged updates include all audio-related fields
     setIsEditing(false);
   };
 
@@ -127,18 +127,35 @@ export function Topicdetails({ topic, onDelete, onSave }) {
                   </div>
 
                   {/* Audio */}
-                  {topic.audio?.path && (
+                  {/* Audio Files */}
+                  {topic.audio && topic.audio.length > 0 && (
                     <div className="mb-6">
-                      <strong className="text-xl text-primary">Audio:</strong>
-                      <div className="mt-2">
-                        <audio
-                          controls
-                          className="w-full mt-2 border border-gray-300 rounded-lg"
-                          src={topic.audio.path}
-                        >
-                          Your browser does not support the audio element.
-                        </audio>
-                      </div>
+                      <strong className="text-xl text-primary">
+                        Audio Files:
+                      </strong>
+                      {topic.audio.map((file, index) => (
+                        <div key={index} className="mt-4">
+                          <audio
+                            controls
+                            className="w-full border border-gray-300 rounded-lg"
+                            src={file.url}
+                          >
+                            Your browser does not support the audio element.
+                          </audio>
+                          <div className="mt-2">
+                            <strong>Subtitle:</strong>
+                            <p className="text-gray-700">
+                              {file.subtitle || "No subtitle provided."}
+                            </p>
+                          </div>
+                          <div className="mt-2">
+                            <strong>Translation:</strong>
+                            <p className="text-gray-700">
+                              {file.translation || "No translation provided."}
+                            </p>
+                          </div>
+                        </div>
+                      ))}
                     </div>
                   )}
 

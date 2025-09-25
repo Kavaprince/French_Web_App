@@ -93,122 +93,168 @@ topicRoutes.post(
   "/topics/create",
   verifyToken,
   verifyEmailMiddleware,
-  upload.single("audio"),
+  upload.array("audio", 20), // Allow up to 20 audio files
   async (req, res) => {
     try {
-      // Ensure the user creating the topic is an admin
+      // Log user role and request details
+      console.log("Request received. User role:", req.user.role);
+      console.log("Request body:", req.body);
+      console.log("Request files:", req.files);
+
+      // Check user role
       if (req.user.role !== "Admin") {
+        console.log("Access denied: User is not an Admin.");
         return res
           .status(403)
           .json({ message: "Access denied. Only admins can create topics." });
       }
 
-      // Ensure an audio file is included
-      const file = req.file;
-      if (!file) {
-        return res.status(400).send({ message: "Audio file is required." });
+      const files = req.files;
+      const subtitles = req.body.subtitle; // Array of subtitles
+      const translations = req.body.translation; // Array of translations
+
+      // Validate file and field requirements
+      if (!files || files.length === 0) {
+        console.log("Validation failed: No audio files provided.");
+        return res.status(400).send({ message: "Audio files are required." });
+      }
+      if (
+        !subtitles ||
+        !translations ||
+        subtitles.length !== files.length ||
+        translations.length !== files.length
+      ) {
+        console.log(
+          "Validation failed: Subtitles and translations do not match the number of audio files."
+        );
+        console.log("Subtitles received:", subtitles);
+        console.log("Translations received:", translations);
+        return res.status(400).send({
+          message:
+            "Subtitles and translations must be provided for each audio file.",
+        });
       }
 
-      // Define the folder path and file path
-      const folderPath = "french-web-app/audio"; // Logical folder path
-      const filePath = `${folderPath}/${file.originalname}`; // Full object name
+      const audioDetails = [];
 
-      // Upload the audio file to Google Cloud Storage
-      const bucket = storageGCP.bucket(bucketName); // Access the bucket
-      const blob = bucket.file(filePath); // Create file in bucket
+      // Process each file for upload
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        const folderPath = "french-web-app/audio";
+        const filePath = `${folderPath}/${file.originalname}`;
 
-      // Create a write stream for the file
-      const blobStream = blob.createWriteStream({
-        metadata: {
-          contentType: file.mimetype, // Set content type dynamically
-        },
-      });
+        console.log(
+          `Uploading file ${file.originalname} to Google Cloud Storage.`
+        );
 
-      blobStream.on("error", (err) => {
-        console.error("Upload error:", err);
-        return res.status(500).send({ message: "Error uploading file." });
-      });
-
-      blobStream.on("finish", async () => {
-        console.log("File uploaded successfully to Google Cloud Storage");
-
-        // Generate the public URL
-        const publicUrl = `https://storage.googleapis.com/${bucketName}/${filePath}`;
-
-        // Create the topic document
-        const newDocument = {
-          title: req.body.title,
-          learning_objectives: req.body.learning_objectives,
-          description: req.body.description,
-          examples: req.body.examples,
-          tips: req.body.tips,
-          audio: {
-            filename: file.originalname,
-            path: publicUrl, // Store the public URL in the database
+        const bucket = storageGCP.bucket(bucketName);
+        const blob = bucket.file(filePath);
+        const blobStream = blob.createWriteStream({
+          metadata: {
+            contentType: file.mimetype,
           },
-          createdAt: new Date(),
-          createdBy: {
-            id: req.user._id,
-            username: req.user.username,
-          },
-        };
-
-        // Insert the topic into the database
-        const topicCollection = await db.collection("topics");
-        const result = await topicCollection.insertOne(newDocument);
-
-        console.log("Topic created by admin:", req.user.username);
-        console.log("User role:", req.user.role);
-        console.log("Uploaded file:", file.originalname);
-        console.log("Generated public URL:", publicUrl);
-
-        res.status(200).send({
-          message: "Topic created successfully.",
-          data: result,
         });
-      });
 
-      // End the stream
-      blobStream.end(file.buffer);
+        try {
+          await new Promise((resolve, reject) => {
+            blobStream.on("error", (err) => {
+              console.error(`Error uploading file ${file.originalname}:`, err);
+              reject(err);
+            });
+            blobStream.on("finish", () => {
+              const publicUrl = `https://storage.googleapis.com/${bucketName}/${filePath}`;
+              console.log(
+                `File uploaded successfully: ${file.originalname}. Public URL: ${publicUrl}`
+              );
+              audioDetails.push({
+                filename: file.originalname,
+                url: publicUrl,
+                subtitle: subtitles[i],
+                translation: translations[i],
+              });
+              resolve();
+            });
+            blobStream.end(file.buffer);
+          });
+        } catch (uploadError) {
+          console.error(
+            `Failed to upload file ${file.originalname} to Google Cloud Storage.`,
+            uploadError
+          );
+          throw uploadError;
+        }
+      }
+
+      // Prepare document for database insertion
+      const newDocument = {
+        title: req.body.title,
+        learning_objectives: req.body.learning_objectives,
+        description: req.body.description,
+        examples: req.body.examples,
+        tips: req.body.tips,
+        audio: audioDetails, // Store audio details with subtitles and translations
+        createdAt: new Date(),
+        createdBy: {
+          id: req.user._id,
+          username: req.user.username,
+        },
+      };
+
+      console.log("Document to be inserted into the database:", newDocument);
+
+      // Insert the new document into the database
+      const topicCollection = await db.collection("topics");
+      const result = await topicCollection.insertOne(newDocument);
+
+      console.log("Topic created successfully by admin:", req.user.username);
+      res.status(200).send({
+        message: "Topic created successfully.",
+        data: result,
+      });
     } catch (err) {
-      console.error("Error adding record or uploading audio:", err);
-      res
-        .status(500)
-        .send({ message: "Failed to add record or upload audio." });
+      console.error("Error creating topic or uploading audio files:", err);
+      res.status(500).send({
+        message: "Failed to create topic or upload audio files.",
+        error: err.message, // Include the specific error message for easier debugging
+      });
     }
   }
 );
 
-// update topics by id
 topicRoutes.patch(
   "/topic/update/:id",
   verifyToken,
   verifyEmailMiddleware,
-  upload.single("audio"),
+  upload.array("audio", 20), // Support up to 20 audio files
   async (req, res) => {
     try {
-      // Debugging logs
-      console.log("Request params ID:", req.params.id); // Ensure the ID is received
-      console.log("Request body:", req.body); // Ensure body fields are received
-      console.log("Request file:", req.file); // Ensure audio file is received if provided
+      console.log("[INFO] Patch request received.");
+      console.log("[INFO] Request params ID:", req.params.id);
+      console.log("[INFO] Request body:", req.body);
+      console.log("[INFO] Number of files uploaded:", req.files?.length || 0);
 
-      // Ensure the user is an admin
+      // Access control: Verify the user's role
       if (req.user.role !== "Admin") {
+        console.log("[ERROR] Access denied: User is not an Admin.");
         return res
           .status(403)
           .json({ message: "Access denied. Only admins can update topics." });
       }
 
-      // Validate topic ID
+      // Validate the topic ID
       if (!req.params.id) {
+        console.log(
+          "[ERROR] Validation failed: Missing Topic ID in the request."
+        );
         return res
           .status(400)
           .json({ message: "Topic ID is missing in the request." });
       }
 
       const query = { _id: new ObjectId(req.params.id) };
+      console.log("[INFO] Query to find topic:", query);
 
-      // Prepare updates
+      // Set updates for non-audio fields
       const updates = {
         $set: {
           title: req.body.title,
@@ -221,50 +267,131 @@ topicRoutes.patch(
             id: req.user._id,
             username: req.user.username,
           },
+          // Ensure subtitle and translation are updated even without audio uploads
+          subtitle: req.body.subtitle,
+          translation: req.body.translation,
         },
       };
+      console.log("[INFO] Updates for non-audio fields:", updates.$set);
 
-      // If an audio file is provided, update the audio field
-      if (req.file) {
-        const file = req.file;
+      // Check if audio files are provided
+      if (req.files && req.files.length > 0) {
+        const files = req.files;
+        const subtitles = Array.isArray(req.body.subtitle)
+          ? req.body.subtitle
+          : [req.body.subtitle]; // Ensure subtitle is an array
+        const translations = Array.isArray(req.body.translation)
+          ? req.body.translation
+          : [req.body.translation]; // Ensure translation is an array
 
-        // Define folder path and file path
-        const folderPath = "french-web-app/audio";
-        const filePath = `${folderPath}/${file.originalname}`;
+        console.log("[INFO] Subtitles received:", subtitles);
+        console.log("[INFO] Translations received:", translations);
 
-        // Upload the audio file to Google Cloud Storage
-        const bucket = storageGCP.bucket(bucketName);
-        const blob = bucket.file(filePath);
-        await blob.save(file.buffer, {
-          metadata: {
-            contentType: file.mimetype,
-          },
-        });
+        // Validate audio files against subtitles/translations
+        if (
+          subtitles.length !== files.length ||
+          translations.length !== files.length
+        ) {
+          console.log(
+            "[ERROR] Validation failed: Subtitles and translations do not match the number of audio files."
+          );
+          return res.status(400).send({
+            message:
+              "Subtitles and translations must be provided for each audio file.",
+          });
+        }
 
-        console.log("Audio uploaded to Google Cloud Storage:", filePath);
+        const audioDetails = [];
+        console.log("[INFO] Starting file upload process.");
 
-        // Include the audio field update
-        updates.$set.audio = {
-          filename: file.originalname,
-          path: `https://storage.googleapis.com/${bucketName}/${filePath}`,
-        };
+        // Upload each audio file
+        for (let i = 0; i < files.length; i++) {
+          const file = files[i];
+          const folderPath = "french-web-app/audio";
+          const filePath = `${folderPath}/${file.originalname}`;
+
+          console.log(
+            `[INFO] Uploading file ${file.originalname} to Google Cloud Storage.`
+          );
+
+          const bucket = storageGCP.bucket(bucketName);
+          const blob = bucket.file(filePath);
+
+          try {
+            await new Promise((resolve, reject) => {
+              const blobStream = blob.createWriteStream({
+                metadata: {
+                  contentType: file.mimetype,
+                },
+              });
+              blobStream.on("error", (err) => {
+                console.error(
+                  `[ERROR] Upload error for file ${file.originalname}:`,
+                  err
+                );
+                reject(err);
+              });
+              blobStream.on("finish", () => {
+                const publicUrl = `https://storage.googleapis.com/${bucketName}/${filePath}`;
+                console.log(
+                  `[INFO] File uploaded successfully: ${file.originalname}. Public URL: ${publicUrl}`
+                );
+                audioDetails.push({
+                  filename: file.originalname,
+                  url: publicUrl,
+                  subtitle: subtitles[i],
+                  translation: translations[i],
+                });
+                resolve();
+              });
+              blobStream.end(file.buffer);
+            });
+          } catch (uploadError) {
+            console.error(
+              `[ERROR] Failed to upload file ${file.originalname} to Google Cloud Storage.`,
+              uploadError
+            );
+            throw uploadError;
+          }
+        }
+
+        console.log(
+          "[INFO] File upload process completed. Audio details:",
+          audioDetails
+        );
+
+        // Add audio details to updates
+        updates.$set.audio = audioDetails;
+      } else {
+        console.log("[INFO] No new audio files uploaded.");
       }
+
+      console.log("[INFO] Document to be updated:", updates);
 
       // Perform the database update
       const topicCollection = await db.collection("topics");
       const result = await topicCollection.updateOne(query, updates);
 
+      console.log("[INFO] Database update result:", result);
+
       if (result.matchedCount === 0) {
+        console.log("[ERROR] No topic found or no changes made.");
         return res
           .status(404)
           .json({ message: "Topic not found or no changes made." });
       }
 
-      console.log("Topic updated successfully by admin:", req.user.username);
+      console.log(
+        "[SUCCESS] Topic updated successfully by admin:",
+        req.user.username
+      );
       res.status(200).json({ message: "Topic updated successfully", result });
     } catch (err) {
-      console.error("Error updating topic:", err);
-      res.status(500).json({ message: "Error updating topic." });
+      console.error("[ERROR] Error updating topic:", err);
+      res.status(500).json({
+        message: "Error updating topic.",
+        error: err.message, // Include specific error message for debugging
+      });
     }
   }
 );

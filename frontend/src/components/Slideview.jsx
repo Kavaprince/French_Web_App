@@ -7,6 +7,7 @@ export function SlideView({ topic, onClose }) {
   const [currentSlide, setCurrentSlide] = useState(0);
   const navigate = useNavigate();
 
+  // Updated slides to include multiple audio files with subtitles and translations
   const slides = [
     {
       title: "Learning Objectives",
@@ -67,30 +68,48 @@ export function SlideView({ topic, onClose }) {
       ),
     },
     {
-      title: "Audio Practice",
+      title: "Audio Practice (Dialogue)",
       content: (
         <div className="animate-fade-in">
-          <h3 className="text-xl font-bold text-gray-800 mb-2">
-            Practice Listening
+          <h3 className="text-xl font-bold text-gray-800 mb-4">
+            Practice Listening through Dialogue
           </h3>
-          {topic.audio?.path ? (
-            <div>
-              <audio
-                controls
-                className="w-full mt-4 rounded-md border border-gray-300"
-                src={topic.audio.path}
-              >
-                Your browser does not support the audio element.
-              </audio>
-            </div>
+          {topic.audio && topic.audio.length > 0 ? (
+            topic.audio.map((audioFile, index) => (
+              <div key={index} className="mb-6">
+                {/* Alternate speaker for dialogue */}
+                <p
+                  className={`text-lg font-semibold mb-2 ${
+                    index % 2 === 0 ? "text-blue-600" : "text-green-600"
+                  }`}
+                >
+                  {index % 2 === 0 ? "Speaker 1:" : "Speaker 2:"}
+                </p>
+                <div className="bg-gray-50 p-4 rounded-md mb-2">
+                  <audio
+                    controls
+                    className="w-full mt-2 rounded-md border border-gray-300"
+                    src={audioFile.url}
+                  >
+                    Your browser does not support the audio element.
+                  </audio>
+                  <p className="mt-2 text-gray-800">
+                    <strong>Subtitle:</strong>{" "}
+                    {audioFile.subtitle || "No subtitle provided."}
+                  </p>
+                  <p className="mt-2 text-gray-800">
+                    <strong>Translation:</strong>{" "}
+                    {audioFile.translation || "No translation provided."}
+                  </p>
+                </div>
+              </div>
+            ))
           ) : (
-            <p className="text-gray-500 mt-4">
-              No audio available for this topic.
-            </p>
+            <p className="text-gray-500">No audio available for this topic.</p>
           )}
           <p className="text-gray-600 mt-4">
-            Listen carefully and repeat the examples to improve your
-            pronunciation.
+            Engage with the dialogue to improve your listening and speaking
+            skills.
           </p>
         </div>
       ),
