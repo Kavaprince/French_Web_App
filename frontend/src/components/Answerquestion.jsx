@@ -19,7 +19,7 @@ function shuffleArray(array) {
 export function AnswerQuestion({ quiz, onCancel }) {
   const [selectedOption, setSelectedOption] = useState("");
   const [shortAnswer, setShortAnswer] = useState("");
-  const [showExplanation, setShowExplanation] = useState(false); // New state
+  const [showExplanation, setShowExplanation] = useState(false);
   const [matchingSelection, setMatchingSelection] = useState([]);
   const [shuffledRightItems, setShuffledRightItems] = useState([]);
   const [message, setMessage] = useState("");
@@ -27,22 +27,41 @@ export function AnswerQuestion({ quiz, onCancel }) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isCompleted, setIsCompleted] = useState(false);
 
+  // Shuffle right-side items (pairB) on component mount
+  useEffect(() => {
+    if (quiz.type === "Matching") {
+      const rightItems = quiz.correctAnswer.map((pair) => pair.pairB);
+      setShuffledRightItems(shuffleArray(rightItems));
+    }
+  }, [quiz]);
+
   const handleSubmit = async () => {
-    // Normalization logic remains the same.
     try {
       setIsSubmitting(true);
-      const result = await submitQuiz(
-        quiz._id,
-        selectedOption || shortAnswer,
-        quiz.correctAnswer
-      );
+
+      let answer;
+
+      if (quiz.type === "Matching") {
+        answer = quiz.correctAnswer.map((pair, index) => ({
+          pairA: pair.pairA,
+          pairB: matchingSelection[index] || "",
+        }));
+      } else {
+        answer = selectedOption || shortAnswer;
+      }
+
+      const result = await submitQuiz(quiz._id, answer, quiz.correctAnswer);
 
       if (result.correct || result.attempt >= 3) {
         setIsCompleted(true);
-        setShowExplanation(true); // Show explanation after submission
+        setShowExplanation(true);
       }
 
-      setMessage(result.correct ? "Correct answer!" : "Try again!");
+      setMessage(
+        result.correct
+          ? "Correct answer!"
+          : "Try again! you have " + (3 - result.attempt) + " attempts left."
+      );
       if (result.score) setScore(result.score);
     } catch (error) {
       setMessage("Error submitting quiz.");
@@ -56,7 +75,7 @@ export function AnswerQuestion({ quiz, onCancel }) {
       <h2 className="text-2xl font-bold text-gray-800">{quiz.title}</h2>
       <p className="text-gray-600 mb-4">{quiz.description}</p>
 
-      {/* Quiz Types */}
+      {/* Multiple Choice */}
       {quiz.type === "Multiple choice" && (
         <div className="mb-4">
           <RadioGroup
@@ -74,12 +93,42 @@ export function AnswerQuestion({ quiz, onCancel }) {
         </div>
       )}
 
+      {/* Short Answer */}
       {quiz.type === "Short answer" && (
         <Textarea
+          className="mb-4"
           value={shortAnswer}
           onChange={(e) => setShortAnswer(e.target.value)}
           disabled={isCompleted}
         />
+      )}
+
+      {/* Matching Question */}
+      {quiz.type === "Matching" && (
+        <div className="mb-4">
+          {quiz.correctAnswer.map((pair, index) => (
+            <div key={index} className="mb-2">
+              <Label className="block mb-1">{pair.pairA}</Label>
+              <select
+                className="w-full border border-gray-300 rounded px-3 py-2"
+                value={matchingSelection[index] || ""}
+                onChange={(e) => {
+                  const newSelection = [...matchingSelection];
+                  newSelection[index] = e.target.value;
+                  setMatchingSelection(newSelection);
+                }}
+                disabled={isCompleted}
+              >
+                <option value="">Select match</option>
+                {shuffledRightItems.map((item, i) => (
+                  <option key={i} value={item}>
+                    {item}
+                  </option>
+                ))}
+              </select>
+            </div>
+          ))}
+        </div>
       )}
 
       {/* Submit Button */}
@@ -89,11 +138,11 @@ export function AnswerQuestion({ quiz, onCancel }) {
 
       {message && <p className="mt-4 text-green-500">{message}</p>}
 
-      {/* Explanation Logic */}
+      {/* Explanation */}
       {showExplanation ? (
         <div className="mt-4 p-4 bg-gray-100 rounded border">
           <strong>Explanation:</strong>
-          <p>{quiz.explanation}</p>
+          <p className="whitespace-pre-line">{quiz.explanation}</p>
         </div>
       ) : (
         isCompleted && (

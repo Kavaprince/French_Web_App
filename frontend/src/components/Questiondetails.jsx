@@ -98,10 +98,10 @@ export function Questiondetails({ quiz, onDelete, onSave, onSubmitAnswer }) {
                 </div>
               )}
               {user.role === "Admin" && (
-                <pre className="mb-5 bg-gray-100 p-3 rounded-md w-full overflow-auto text-left">
-                  <code className="font-mono">
-                    <strong>Correct Answer:</strong>
-                    <div className="mt-5">
+                <>
+                  <div className="mb-5 bg-gray-100 p-3 rounded-md w-full overflow-auto text-left">
+                    <strong className="block mb-2">Correct Answer:</strong>
+                    <div className="font-mono">
                       {quiz.type === "Matching" &&
                         quiz.correctAnswer.map((pair, index) => (
                           <p key={index}>
@@ -112,15 +112,17 @@ export function Questiondetails({ quiz, onDelete, onSave, onSubmitAnswer }) {
                         <div>{quiz.correctAnswer}</div>
                       )}
                     </div>
-                  </code>
-                </pre>
+                  </div>
+
+                  <div className="mb-5 text-left">
+                    <strong>Explanation:</strong>
+                    <div className="bg-gray-100 p-3 rounded-md border border-gray-300 whitespace-pre-line leading-relaxed font-mono">
+                      {quiz.explanation}
+                    </div>
+                  </div>
+                </>
               )}
-              <div className="mb-5 text-left">
-                <strong>Explanation:</strong>
-                <div className="bg-gray-100 p-3 rounded-md border border-gray-300 whitespace-pre-line leading-relaxed font-mono">
-                  {quiz.explanation}
-                </div>
-              </div>
+
               {user.role === "Admin" ? (
                 <div className="flex justify-end">
                   <div className="mr-2">
